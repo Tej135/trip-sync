@@ -1,5 +1,7 @@
 const User = require('../models/user.model');
 const jwt = require('jsonwebtoken');
+const emailService = require('../services/email.service');
+const tokenBlackListModel = require('../models/blackList.model');
 
 const sendTokenResponse = (user, statusCode, res, message = 'Success') => {
     const token = jwt.sign(
@@ -36,14 +38,16 @@ const register = async (req, res) => {
         if (!name || !email || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Name, email, and password are required'
+                message: 'Name, email, and password are required',
+                status: 'failed'
             });
         }
 
         if (confirmPassword && password !== confirmPassword) {
             return res.status(400).json({
                 success: false,
-                message: 'Passwords do not match'
+                message: 'Passwords do not match',
+                status: 'failed'
             });
         }
 
@@ -51,7 +55,8 @@ const register = async (req, res) => {
         if (existingUser) {
             return res.status(409).json({
                 success: false,
-                message: 'An account with this email already exists'
+                message: 'An account with this email already exists',
+                status: 'failed'
             });
         }
 
@@ -66,10 +71,16 @@ const register = async (req, res) => {
         });
 
         sendTokenResponse(user, 201, res, 'Registration successful! Welcome to TripSync.');
+
+        // Dispatch Welcome / Registration Email asynchronously
+        emailService.sendRegistrationEmail(user.email, user.name).catch(err => {
+            console.error('[AuthController] Failed to send registration email:', err.message);
+        });
     } catch (error) {
         res.status(500).json({
             success: false,
-            message: error.message
+            message: error.message,
+            status: 'failed'
         });
     }
 };
@@ -81,7 +92,8 @@ const login = async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Please provide both email and password'
+                message: 'Missing Fields, Please Enter all Fields!',
+                status: 'failed'
             });
         }
 
@@ -89,36 +101,65 @@ const login = async (req, res) => {
         if (!user) {
             return res.status(401).json({
                 success: false,
-                message: 'Invalid credentials. User not found.'
+                message: 'Invalid credentials. User not found.',
+                status: 'failed'
             });
         }
 
-        const isMatch = await user.matchPassword(password);
+        const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             return res.status(401).json({
                 success: false,
-                message: 'Invalid credentials. Password incorrect.'
+                message: 'Invalid credentials. Password incorrect.',
+                status: 'failed'
             });
         }
 
-        sendTokenResponse(user, 200, res, 'Login successful');
+        sendTokenResponse(user, 200, res, 'User Logged in Successfully');
+
+        // Dispatch Login Notification Email
+        const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        emailService.sendLoginEmail(user.email, user.name, new Date().toLocaleString(), clientIp).catch(err => {
+            console.error('[AuthController] Failed to send login email:', err.message);
+        });
     } catch (error) {
         res.status(500).json({
             success: false,
-            message: error.message
+            message: error.message,
+            status: 'failed'
         });
     }
 };
 
 const logout = async (req, res) => {
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({
+            success: false,
+            message: 'Token is not found',
+            status: 'failed'
+        });
+    }
+
+    try {
+        await tokenBlackListModel.create({ token });
+    } catch (err) {
+        if (err.code !== 11000) {
+            console.error('[AuthController] Blacklist error:', err.message);
+        }
+    }
+
+    res.clearCookie('token');
     res.cookie('token', 'none', {
         expires: new Date(Date.now() + 5 * 1000),
         httpOnly: true
     });
 
-    res.status(200).json({
+    return res.status(200).json({
         success: true,
-        message: 'Logged out successfully'
+        message: 'User Logged out Successfully',
+        status: 'success'
     });
 };
 
@@ -141,7 +182,7 @@ const updateProfile = async (req, res) => {
     try {
         const updates = req.body;
         delete updates.password;
-        delete updates.role; // Role cannot be escalated by traveler directly
+        delete updates.role;
 
         const user = await User.findByIdAndUpdate(req.user._id, updates, {
             new: true,
@@ -163,8 +204,11 @@ const updateProfile = async (req, res) => {
 
 module.exports = {
     register,
+    userRegister: register,
     login,
+    userLogin: login,
     logout,
+    userLogout: logout,
     getMe,
     updateProfile
 };

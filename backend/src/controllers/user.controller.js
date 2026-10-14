@@ -3,6 +3,7 @@ const LocationHistory = require('../models/locationHistory.model');
 const Place = require('../models/place.model');
 const { calculateDistanceMeters } = require('../services/geo.service');
 const { createOrder, verifyPaymentSignature } = require('../services/payment.service');
+const emailService = require('../services/email.service');
 
 const getAllUsers = async (req, res) => {
     try {
@@ -81,9 +82,19 @@ const createProSubscriptionOrder = async (req, res) => {
 const verifyProSubscription = async (req, res) => {
     try {
         const { orderId, paymentId, signature, plan = 'monthly' } = req.body;
+        const price = plan === 'annual' ? 1999 : 199;
 
         const isValid = verifyPaymentSignature(orderId, paymentId, signature);
         if (!isValid) {
+            if (req.user?.email) {
+                emailService.sendPaymentFailureEmail(
+                    req.user.email,
+                    req.user.name,
+                    price,
+                    `TripSync Pro (${plan})`,
+                    'Payment signature verification failed'
+                ).catch(err => console.error('[UserController] Failure email error:', err.message));
+            }
             return res.status(400).json({
                 success: false,
                 message: 'Invalid payment signature'
@@ -109,6 +120,17 @@ const verifyProSubscription = async (req, res) => {
             },
             { new: true }
         ).select('-password');
+
+        // Dispatch Payment Success Email
+        if (req.user?.email) {
+            emailService.sendPaymentSuccessEmail(
+                req.user.email,
+                req.user.name,
+                price,
+                `TripSync Pro Subscription (${plan})`,
+                paymentId
+            ).catch(err => console.error('[UserController] Success email error:', err.message));
+        }
 
         res.status(200).json({
             success: true,

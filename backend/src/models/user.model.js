@@ -102,6 +102,7 @@ userSchema.pre('save', async function(next) {
 userSchema.methods.matchPassword = async function(enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
+userSchema.methods.comparePassword = userSchema.methods.matchPassword;
 
 // Method to update explorer level based on verified reviews count
 userSchema.methods.calculateExplorerLevel = function() {
