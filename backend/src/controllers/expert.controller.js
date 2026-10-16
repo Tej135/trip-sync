@@ -2,7 +2,7 @@ const LocalExpert = require('../models/expert.model');
 const ExpertBooking = require('../models/expertBooking.model');
 const User = require('../models/user.model');
 const { createOrder, verifyPaymentSignature } = require('../services/payment.service');
-const { sendBookingConfirmationEmail } = require('../services/email.service');
+const { sendBookingConfirmationEmail, sendPaymentSuccessEmail, sendPaymentFailureEmail } = require('../services/email.service');
 
 const getExperts = async (req, res) => {
     try {
@@ -104,6 +104,19 @@ const verifyBookingPayment = async (req, res) => {
 
         const isValid = verifyPaymentSignature(orderId, paymentId, signature);
         if (!isValid) {
+            booking.paymentStatus = 'FAILED';
+            await booking.save();
+
+            if (req.user?.email) {
+                sendPaymentFailureEmail(
+                    req.user.email,
+                    req.user.name,
+                    booking.totalAmount,
+                    `Local Expert Tour: ${booking.tourTitle}`,
+                    'Payment signature verification failed'
+                ).catch(err => console.error('[ExpertController] Failure email error:', err.message));
+            }
+
             return res.status(400).json({ success: false, message: 'Invalid payment signature' });
         }
 
@@ -116,12 +129,20 @@ const verifyBookingPayment = async (req, res) => {
         // Increment expert total bookings
         await LocalExpert.findByIdAndUpdate(booking.expert._id, { $inc: { totalBookings: 1 } });
 
-        // Dispatch confirmation email
+        // Dispatch confirmation and payment receipt emails
         await sendBookingConfirmationEmail(req.user.email, {
             tourTitle: booking.tourTitle,
             bookingDate: booking.bookingDate,
             totalAmount: booking.totalAmount
         });
+
+        sendPaymentSuccessEmail(
+            req.user.email,
+            req.user.name,
+            booking.totalAmount,
+            `Local Expert Tour: ${booking.tourTitle}`,
+            paymentId
+        ).catch(err => console.error('[ExpertController] Success email error:', err.message));
 
         res.status(200).json({
             success: true,

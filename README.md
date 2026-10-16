@@ -120,16 +120,20 @@ Eliminates fake and sponsored reviews via a dual-layer verification engine:
 - **Debt Simplification Algorithm:** Minimizes total cross-settlement cash transfers between friends.
 - **UPI Deep Links:** Direct `upi://pay` links for instant one-tap settlement via Google Pay, PhonePe, or Paytm.
 
-### 9. 🤝 Local Expert Marketplace & Simulated Checkout
+### 9. 🤝 Local Expert Marketplace & Razorpay Payments
 - Connect with verified local guides (e.g., certified Jaipur Heritage historians, Goa hidden beach guides).
 - View hourly rates, domain expertise, and verified client ratings.
-- Integrated with Razorpay checkout simulation for instant booking confirmation.
+- Integrated with **Razorpay Payment Gateway** (Order creation, HMAC-SHA256 signature verification, and automated email receipts).
 
 ### 10. 🚨 Emergency SOS & Panic Dispatch
 - One-touch emergency beacon broadcasts traveler coordinates, battery status, and emergency notes to registered contacts and nearest local police/tourist helplines.
 
 ### 11. 🤖 AI Travel Copilot Chatbot
 - Floating contextual copilot ready to answer questions on dress codes, best sunset spots, taxi fare estimates, and emergency guidance.
+
+### 12. 🔐 Security, JWT Blacklist & Email Dispatch
+- **Token Blacklist on Logout:** True session invalidation using MongoDB TTL indexing so logged-out tokens cannot be reused.
+- **Automated Email Service:** Nodemailer integration (Gmail SMTP & OAuth2) dispatching real-time login security alerts, booking receipts, and payment failure notifications.
 
 ---
 
@@ -242,29 +246,28 @@ npm install
 
 ### Option A: One-Click Windows Launcher (Easiest)
 In Windows File Explorer, double-click:
-```
-C:\Users\TEJ\Projects\TripSync\start-tripsync.bat
+```text
+start-tripsync.bat
 ```
 This launcher automatically:
-1. Adds Node.js to your PATH
-2. Boots the Express backend server on port 3000
-3. Boots the Vite frontend dev server on port 5173
-4. Automatically opens **http://localhost:5173** in your default web browser
+1. Boots the Express backend server on port 3000
+2. Boots the Vite frontend dev server on port 5173
+3. Automatically opens **http://localhost:5173** in your default web browser
 
 ---
 
-### Option B: Manual Terminals (PowerShell / CMD)
+### Option B: Manual Terminals (PowerShell / Git Bash)
 
 **Terminal 1 — Backend:**
-```powershell
-cd C:\Users\TEJ\Projects\TripSync\backend
-node src/server.js
+```bash
+cd backend
+npm run dev
 ```
-*Backend runs on `http://localhost:3000`*
+*Backend runs on `http://localhost:3000` (or run `node server.js`)*
 
 **Terminal 2 — Frontend:**
-```powershell
-cd C:\Users\TEJ\Projects\TripSync\frontend
+```bash
+cd frontend
 npm run dev
 ```
 *Frontend runs on `http://localhost:5173`*
@@ -307,9 +310,13 @@ All backend routes are mounted under `/api/v1/`:
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Health & uptime status check |
-| `POST` | `/api/v1/auth/login` | Authenticate user (JWT cookie + Bearer token) |
-| `POST` | `/api/v1/auth/register` | Register new traveler profile |
+| `POST` | `/api/v1/auth/login` | Authenticate user (JWT cookie + Bearer token) & send login email |
+| `POST` | `/api/v1/auth/register` | Register new traveler profile & send welcome email |
+| `POST` | `/api/v1/auth/logout` | Invalidate active token via Blacklist & clear auth cookie |
 | `GET` | `/api/v1/auth/me` | Fetch authenticated user profile |
+| `GET` | `/api/v1/payment/config` | Retrieve public Razorpay Key ID |
+| `POST` | `/api/v1/payment/create-order` | Create Razorpay payment order in INR |
+| `POST` | `/api/v1/payment/verify` | Verify payment signature and dispatch receipt email |
 | `GET` | `/api/v1/places` | List tourist places with safety & creator filters |
 | `GET` | `/api/v1/places/nearby` | GeoJSON `$near` radius search |
 | `GET` | `/api/v1/places/:identifier` | Detailed place inspection (Safety & Creator rules) |
@@ -322,7 +329,7 @@ All backend routes are mounted under `/api/v1/`:
 | `POST` | `/api/v1/expenses` | Add shared expense & recalculate debts |
 | `GET` | `/api/v1/expenses/trip/:tripId` | Fetch Splitwise debt matrix & UPI deep links |
 | `GET` | `/api/v1/experts` | Browse certified local guides |
-| `POST` | `/api/v1/experts/:id/book` | Book consultation (Razorpay simulation) |
+| `POST` | `/api/v1/experts/:id/book` | Book consultation (Razorpay checkout) |
 | `POST` | `/api/v1/emergency/sos` | Dispatch emergency SOS alert & GPS broadcast |
 | `POST` | `/api/v1/chat` | AI Travel Copilot chatbot query |
 
@@ -340,17 +347,17 @@ TripSync/
 │   ├── .env                       # Environment configuration
 │   ├── .env.example               # Example environment template
 │   ├── package.json               # Backend dependencies & scripts
+│   ├── server.js                  # App entry point & server listener (outside src)
 │   ├── uploads/                   # Uploaded media & cached PDF booklets
 │   └── src/
 │       ├── app.js                 # Express application & middleware assembly
-│       ├── server.js              # Server bootstrapper & MongoDB connection
 │       ├── seed.js                # Database seeder (30 places, routes, experts)
-│       ├── controllers/           # 18 Express route controllers
+│       ├── controllers/           # Express route controllers (Auth, Payment, Places, etc.)
 │       ├── db/                    # Mongoose connection & in-memory fallback
-│       ├── middlewares/           # JWT Auth, Role Guard, Multer, Error Handler
-│       ├── models/                # 16 Mongoose Schemas (GeoJSON 2dsphere)
-│       ├── routes/                # REST API routes
-│       └── services/              # AI Sequencer, PDFKit, Razorpay, Weather, Geo
+│       ├── middlewares/           # JWT Auth, Token Blacklist, Role Guard, Multer, Error Handler
+│       ├── models/                # Mongoose Schemas (GeoJSON 2dsphere, User, Blacklist, etc.)
+│       ├── routes/                # REST API routes (Auth, Payment, Trips, etc.)
+│       └── services/              # AI Sequencer, PDFKit, Razorpay, Email, Weather, Geo
 │
 └── frontend/                      # React 18 Vite Frontend
     ├── index.html                 # HTML shell with Google Fonts & Leaflet styles

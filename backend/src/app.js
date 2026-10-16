@@ -50,6 +50,7 @@ app.use('/api/v1/packing', require('./routes/packing.routes'));
 app.use('/api/v1/compare', require('./routes/compare.routes'));
 app.use('/api/v1/booklet', require('./routes/booklet.routes'));
 app.use('/api/v1/chat', require('./routes/chatbot.routes'));
+app.use('/api/v1/payment', require('./routes/payment.routes'));
 
 // Fallback 404 handler for unknown routes
 app.use('*', (req, res) => {
